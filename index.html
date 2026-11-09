@@ -78,10 +78,36 @@ document.querySelectorAll('.tabs button').forEach(b => b.onclick = () => {
   search(); $q.focus();
 });
 
-async function api(path) {
-  const res = await fetch(path), data = await res.json();
-  if (!res.ok) throw new Error(data.error);
-  return data;
+// Apple Music catalogue is queried straight from the visitor's browser, so each visitor has their own rate limit
+const itunesCache = new Map();
+async function itunes(endpoint, params) {
+  const url = `https://itunes.apple.com/${endpoint}?${new URLSearchParams(params)}`;
+  if (itunesCache.has(url)) return itunesCache.get(url);
+  for (let attempt = 0; ; attempt++) {
+    const res = await fetch(url);
+    if (res.ok) {
+      const results = (await res.json()).results;
+      itunesCache.set(url, results);
+      return results;
+    }
+    if (![403, 429].includes(res.status) || attempt === 2)
+      throw new Error(res.status === 403 || res.status === 429 ? 'Apple Music is limiting requests right now, wait a minute and retry' : `Apple Music error ${res.status}`);
+    await new Promise(r => setTimeout(r, 4000 * (attempt + 1)));
+  }
+}
+
+// Every song on the artist's albums/EPs/singles plus their top tracks (features), newest first
+async function artistSongs(artistId, country) {
+  const albums = (await itunes('lookup', { id: artistId, entity: 'album', limit: 200, country }))
+    .filter(r => r.wrapperType === 'collection').map(r => r.collectionId);
+  let tracks = await itunes('lookup', { id: artistId, entity: 'song', limit: 200, country });
+  for (let i = 0; i < albums.length; i += 50)
+    tracks = tracks.concat(await itunes('lookup', { id: albums.slice(i, i + 50).join(','), entity: 'song', limit: 200, country }));
+  const seen = new Set();
+  return tracks
+    .filter(t => t.wrapperType === 'track' && t.previewUrl)
+    .sort((a, b) => (b.releaseDate || '').localeCompare(a.releaseDate || ''))
+    .filter(t => { const k = t.trackName.toLowerCase().trim(); return !seen.has(k) && seen.add(k); });
 }
 
 async function search() {
@@ -95,11 +121,12 @@ async function search() {
   $list.innerHTML = '<div class="msg">Searching…</div>';
   try {
     if (mode === 'song') {
-      const songs = await api(`/api/search?country=${$country.value}&term=${encodeURIComponent(term)}`);
+      const songs = (await itunes('search', { term, country: $country.value, media: 'music', entity: 'song', limit: 25 }))
+        .filter(r => r.previewUrl);
       if (id === searchId) showSongs(songs, id);
       return;
     }
-    const artists = await api(`/api/artists?country=${$country.value}&term=${encodeURIComponent(term)}`);
+    const artists = await itunes('search', { term, country: $country.value, media: 'music', entity: 'musicArtist', attribute: 'artistTerm', limit: 10 });
     if (id !== searchId) return;
     $list.innerHTML = artists.length ? '' : '<div class="msg">No artist found. Try another store or spelling.</div>';
     for (const a of artists) {
@@ -123,7 +150,7 @@ async function loadArtist(a) {
   $count.textContent = '';
   $list.innerHTML = `<div class="msg">Loading every ${a.artistName} song…</div>`;
   try {
-    const songs = await api(`/api/artist?country=${$country.value}&id=${a.artistId}`);
+    const songs = await artistSongs(a.artistId, $country.value);
     if (id !== searchId) return;
     $count.textContent = `${songs.length} songs by ${a.artistName}`;
     showSongs(songs, id);
