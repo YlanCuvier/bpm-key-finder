@@ -5,6 +5,9 @@ Run:  python3 server.py   then open http://localhost:8765
 import json
 import os
 import subprocess
+import threading
+import time
+import urllib.error
 import urllib.parse
 import urllib.request
 from functools import lru_cache
@@ -38,8 +41,28 @@ def fetch(url):
         return r.read()
 
 
+# Apple allows roughly 20 search/lookup calls per minute per IP: space them out, cache them, retry when throttled
+_itunes_lock = threading.Lock()
+_last_call = [0.0]
+MIN_GAP = 3.0  # seconds between calls to Apple
+
+
+@lru_cache(maxsize=2000)
+def _itunes_cached(url):
+    for attempt in range(4):
+        with _itunes_lock:
+            time.sleep(max(0.0, _last_call[0] + MIN_GAP - time.time()))
+            _last_call[0] = time.time()
+        try:
+            return json.loads(fetch(url))['results']
+        except urllib.error.HTTPError as e:
+            if e.code not in (403, 429) or attempt == 3:
+                raise RuntimeError('Apple Music is limiting requests right now, wait a minute and retry') from e
+            time.sleep(5 * (attempt + 1))
+
+
 def itunes(endpoint, **params):
-    return json.loads(fetch(f'https://itunes.apple.com/{endpoint}?{urllib.parse.urlencode(params)}'))['results']
+    return list(_itunes_cached(f'https://itunes.apple.com/{endpoint}?{urllib.parse.urlencode(sorted(params.items()))}'))
 
 
 def artist_songs(artist_id, country):

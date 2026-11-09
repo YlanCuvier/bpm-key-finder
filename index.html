@@ -67,7 +67,9 @@ const $artists = document.getElementById('artists'), $count = document.getElemen
 const player = new Audio();
 let searchId = 0, timer, mode = 'song';
 
-$q.addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(search, 400); });
+let lastQuery = '';
+$q.addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(search, 900); });
+$q.addEventListener('keydown', (e) => { if (e.key === 'Enter') { clearTimeout(timer); search(); } });
 $country.addEventListener('change', search);
 document.querySelectorAll('.tabs button').forEach(b => b.onclick = () => {
   document.querySelectorAll('.tabs button').forEach(x => x.classList.toggle('on', x === b));
@@ -83,7 +85,11 @@ async function api(path) {
 }
 
 async function search() {
-  const term = $q.value.trim(), id = ++searchId;
+  const term = $q.value.trim();
+  const query = `${mode}|${$country.value}|${term}`;
+  if (query === lastQuery) return;
+  lastQuery = query;
+  const id = ++searchId;
   $artists.innerHTML = $count.textContent = $list.innerHTML = '';
   if (!term) return;
   $list.innerHTML = '<div class="msg">Searching…</div>';
@@ -105,7 +111,10 @@ async function search() {
       $artists.appendChild(b);
     }
     if (artists.length === 1) loadArtist(artists[0]);
-  } catch (e) { if (id === searchId) $list.innerHTML = `<div class="msg">Search failed: ${e.message}</div>`; }
+  } catch (e) {
+    lastQuery = '';
+    if (id === searchId) $list.innerHTML = `<div class="msg">Search failed: ${e.message}</div>`;
+  }
 }
 
 async function loadArtist(a) {
