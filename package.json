@@ -1,0 +1,53 @@
+{
+  "name": "bpm-key-finder",
+  "productName": "BPM & Key Finder",
+  "version": "1.0.0",
+  "description": "Search Apple Music and get the BPM and key of any song",
+  "author": "Ylan Cuvier",
+  "license": "MIT",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --publish never"
+  },
+  "devDependencies": {
+    "electron": "^33.2.0",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "com.ylancuvier.bpmkeyfinder",
+    "files": [
+      "main.js",
+      "index.html",
+      "analysis.js",
+      "analysis-worker.js",
+      "build/icon.png"
+    ],
+    "directories": {
+      "output": "dist"
+    },
+    "win": {
+      "target": "nsis"
+    },
+    "nsis": {
+      "oneClick": true,
+      "artifactName": "BPM-Key-Finder-${version}-windows-setup.${ext}"
+    },
+    "mac": {
+      "target": {
+        "target": "dmg",
+        "arch": [
+          "universal"
+        ]
+      },
+      "category": "public.app-category.music",
+      "artifactName": "BPM-Key-Finder-${version}-mac.${ext}"
+    },
+    "linux": {
+      "target": "AppImage",
+      "category": "Audio",
+      "artifactName": "BPM-Key-Finder-${version}-linux.${ext}"
+    },
+    "artifactName": "BPM-Key-Finder-${version}-${os}.${ext}"
+  }
+}
