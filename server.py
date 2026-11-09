@@ -185,6 +185,11 @@ class Handler(SimpleHTTPRequestHandler):
     def __init__(self, *a, **kw):
         super().__init__(*a, directory=str(Path(__file__).parent), **kw)
 
+    def end_headers(self):
+        # Always serve the latest page/scripts after a redeploy
+        self.send_header('Cache-Control', 'no-cache')
+        super().end_headers()
+
     def send_json(self, status, obj):
         body = json.dumps(obj).encode()
         self.send_response(status)
